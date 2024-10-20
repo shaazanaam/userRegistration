@@ -1,10 +1,11 @@
 import express from "express";
 import bodyParser from "body-parser";
 import pg from "pg";
-import { resolveInclude } from "ejs";
+import bcrypt, { hash } from "bcrypt";
 
 const app = express();
 const port = 3000;
+const saltRounds = 10;
 const db = new pg.Client({
   user: "postgres",
   host: "localhost",
@@ -35,16 +36,28 @@ app.post("/register", async (req, res) => {
   const password = req.body.password
 
   try{
-   const checkResult = await db.query(`SELECT *   FROM users WHERE email =$1`[email],)
+   const checkResult = await db.query(`SELECT *   FROM users WHERE email =$1`,[email],)
 
    if(checkResult.rows.length >0){
     res.send(" Email already exists . Try logging in .")
    }
    else{
-    await db.query(`INSERT into users (email, password ) VALUES  ($1,$2)`,[email,password])
+    //Password hashing 
+    bcrypt.hash(password,saltRounds, async(err,hash)=>{
+    if (err){
+      console.log (" Error hashing password:", err);
+    }
+    const result =await db.query(`INSERT into users (email, password )
+    VALUES  ($1,$2)`,[email,hash]);
+    console.log(result);
+    res.render("secrets.ejs");
+
+    })
+     
+    
    }
   
-  res.render("secrets.ejs");
+  
 }
 catch(err){
   console.log(err)
@@ -54,23 +67,31 @@ catch(err){
 
 app.post("/login", async (req, res) => {
   const  email = req.body.username
-  const password = req.body.password
+  const loginPassword = req.body.password
 
   console.log(email);
-  console.log(password);
+  console.log(loginPassword);
   try{
    const result = await db.query (`SELECT  email, password FROM users WHERE email = $1`, [email])
 
    if (result.rows.length >0){
-    if(password == result.rows[0].password){
-      res.render("secrets.ejs")
-     } else {
-      res.send ("Incorrect Password");
-     }
+
+    bcrypt.compare(loginPassword, result.rows[0].password, (err,result)=>{
+      if (err){
+        console.log(err)
+      } else {
+        if(result){
+          res.render("secrets.ejs")
+        } else{
+          res.send ("Incorrect Password");
+        }
+      }
+    })
+   
    } else {
     res.send (" User not found")
    }
-   console.log(result.rows)
+   
    
   }catch (err){
     console.log(err)
